@@ -1,0 +1,46 @@
+# TryHackMe – Red Teaming Progress
+
+## Completed Rooms
+
+### Initial Access Module – Phishing
+Completed the **Phishing** room in the Red Teaming Initial Access path.
+
+#### What I Learned
+- The role of phishing as a primary Initial Access technique in red team engagements
+- Different phishing objectives:
+  - Credential harvesting
+  - Malware delivery
+  - Initial foothold acquisition
+- Key elements of effective phishing:
+  - Pretext creation
+  - Payload selection
+  - Infrastructure setup considerations
+- Importance of realism and targeting in phishing campaigns
+- Mapping phishing techniques to the MITRE ATT&CK framework
+
+---
+
+### Post Compromise Module – The Lay of the Land
+Completed **The Lay of the Land** room in the Red Teaming Post Compromise path.
+
+#### What I Learned
+- Post-compromise goals after gaining initial access
+- Host and environment enumeration techniques:
+  - User and group discovery
+  - Network configuration enumeration
+  - Installed software and security controls identification
+- Understanding the environment before lateral movement
+- Identifying high-value targets and potential privilege escalation paths
+- Importance of situational awareness during post-exploitation
+
+---
+
+## Key Takeaways
+- Initial Access and Post-Compromise phases are closely connected
+- Enumeration is critical before taking any further action
+- Successful red teaming relies on understanding the environment, not just tools
+
+---
+
+📚 Platform: TryHackMe  
+🔴 Path: Red Teaming
