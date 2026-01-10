@@ -32,3 +32,46 @@ Confirmed that the domain DNS server was reachable:
 
 ```bash
 nslookup za.tryhackme.com
+Result:
+Domain resolved correctly
+DNS server reachable
+
+2. Domain Controller Discovery (SRV Record)
+nslookup -type=SRV _ldap._tcp.za.tryhackme.com
+
+Output:
+_ldap._tcp.za.tryhackme.com service = 0 100 389 THMDC.za.tryhackme.com
+
+Finding:
+Actual DC hostname: THMDC.za.tryhackme.com
+Lab referenced thmdc.za.tryhackme.com
+Case mismatch caused resolution failure in this environment
+
+3. Correct Hostname Resolution
+nslookup THMDC.za.tryhackme.com
+Successfully resolved.
+
+4. AD Authentication on Linux
+Attempted Windows-style login:
+ssh za\arthur.campbell@THMDC.za.tryhackme.com
+
+Error:
+bash: AD: No such file or directory
+
+Reason:
+Backslash (\) interpreted by bash
+
+Correct approaches:
+ssh "za\\arthur.campbell"@THMDC.za.tryhackme.com
+or (preferred):
+ssh arthur.campbell@za.tryhackme.com
+
+Key Learnings
+AD relies heavily on DNS SRV records
+DNS troubleshooting is a prerequisite for lateral movement
+Lab environments may behave inconsistently with DNS case handling
+UPN format (user@domain) is safest on Linux
+
+Conclusion
+Even without completing lateral movement, the troubleshooting workflow itself
+mirrors real-world Red Team and internal assessment practices.
