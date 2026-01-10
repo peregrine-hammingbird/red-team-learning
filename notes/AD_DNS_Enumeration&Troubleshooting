@@ -1,0 +1,34 @@
+# AD DNS Enumeration & Troubleshooting Notes (THM)
+
+## Overview
+This repository documents the process of troubleshooting Active Directory DNS resolution
+issues encountered during a Red Team / lateral movement lab.
+
+Although full exploitation and lateral movement were not completed, the primary focus was on
+systematically identifying why expected connectivity and name resolution failed, which closely
+mirrors real-world troubleshooting scenarios.
+
+---
+
+## Lab Context
+- Environment: TryHackMe Active Directory lab
+- Attacker Machine: Linux (AttackBox)
+- Target Domain: za.tryhackme.com
+- Domain Controller IP: 10.200.74.101
+
+---
+
+## Observed Issues
+- Standard hostname resolution failed (`NXDOMAIN`)
+- Initial assumptions based on lab instructions did not match actual DNS behavior
+- AD authentication syntax caused shell-level parsing errors
+
+---
+
+## Investigation & Troubleshooting Steps
+
+### 1. DNS Server Validation
+Confirmed that the domain DNS server was reachable:
+
+```bash
+nslookup za.tryhackme.com
