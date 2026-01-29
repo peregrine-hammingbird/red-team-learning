@@ -1,0 +1,98 @@
+# THM Notes — Windows Persistence: Scheduled Tasks / Startup Folder / Run Keys
+
+Date: 2026-01-29  
+Platform: TryHackMe  
+Topic: Windows Persistence Techniques (attacker tradecraft) + defender-focused artifacts/detections
+
+---
+
+## What I studied today
+
+Windowsの代表的な永続化（Persistence）として、以下の3経路を整理した。
+
+1. **Scheduled Tasks (Task Scheduler)**
+2. **Startup Folder**
+3. **Run / RunOnce Registry Keys**
+
+「どうやって動くか」だけでなく、**どこに痕跡が残るか / SOCでどう検知するか**に重点を置いてまとめた。
+
+---
+
+## 1) Scheduled Tasks (Task Scheduler)
+
+### Key concepts
+- タスクは **時間/イベント**をトリガーに実行でき、実行ユーザー（例：SYSTEM）や実行条件を持つ。
+- 攻撃者は永続化に加えて、**タスクの可視性（一覧表示）を下げる方向**の改変を行うケースがある。
+
+### Forensic artifacts / where to look
+- **Task Scheduler Operational Log**（タスク作成/更新/実行の記録）
+- **Registry: TaskCache**（タスク定義・メタ情報が保存される領域）
+  - `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\...`
+- タスク定義の **実行コマンド/引数**, 実行ユーザー, 実行頻度（短間隔の繰り返し）などのメタ情報
+
+### Detection ideas (SOC perspective)
+- **短い間隔での周期実行**（例：毎分など）＋ **ユーザー操作と無関係な作成/更新**
+- **SYSTEM実行**や管理者権限コンテキストでの登録
+- TaskCache配下の **不自然な更新**（特にACL/SD関連の変更がある場合は高優先度）
+
+### Hardening / prevention
+- タスク作成・更新の監査ログ有効化、Operational Logの収集
+- 既知正規タスクのベースライン化（差分検知）
+- 重要ホストでは、権限の最小化・不要な管理ツールの制限
+
+---
+
+## 2) Startup Folder
+
+### Key concepts
+- OS起動/ユーザーログオン時に自動実行される典型的な経路。
+- 書き込み場所が明確で、**ファイル監視（FIM）**と相性が良い。
+
+### Forensic artifacts / where to look
+- Startupフォルダ配下の **新規作成 / 更新 / 実行**
+- 署名・作成日時・配置場所の妥当性（“最近作られた実行ファイル”が起動に紐づくのは要注意）
+
+### Detection ideas
+- Startupフォルダへの **書き込みイベント**（新規追加・更新）
+- 起動直後のプロセスツリーで、Startup起点の実行を相関
+- 署名なし/未知の実行ファイルの自動起動を優先調査
+
+### Hardening
+- AppLocker / WDAC等の実行制御（許可リスト運用）
+- Startupフォルダの監視 + 自動起動項目の定期棚卸し
+
+---
+
+## 3) Run / RunOnce Registry Keys
+
+### Key concepts
+- `HKCU` は **ユーザー単位**、`HKLM` は **マシン全体**に影響。
+- `Run` はログオンごと、`RunOnce` は **一回だけ**実行される。
+
+### Forensic artifacts / where to look
+- `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+- `HKCU\Software\Microsoft\Windows\CurrentVersion\RunOnce`
+- `HKLM\Software\Microsoft\Windows\CurrentVersion\Run`
+- `HKLM\Software\Microsoft\Windows\CurrentVersion\RunOnce`
+- 値名・実体パス・拡張子整合性（見せかけ/配置の不自然さ）
+
+### Detection ideas
+- 上記キーの **作成/変更監査**（レジストリ監査 or EDRテレメトリ）
+- ログオン直後のプロセス生成と相関（Runキー起点の実行を可視化）
+- `HKLM` 側の変更は影響範囲が広いので優先度高
+
+### Hardening
+- 自動起動項目の定期監査（許可リスト化）
+- 管理者権限の利用制限、不要な永続化経路の監視強化
+
+---
+
+## Takeaways
+- Persistenceは「置く」だけでなく、**痕跡の残り方**（ログ/レジストリ/ファイル）とセットで理解するとSOC運用に直結する。
+- 今日の学習で、3経路それぞれの **観測ポイント（ログ/キー/フォルダ）** を整理できた。
+
+---
+
+## Next steps
+- 3経路に対して、誤検知を抑えるための **ベースライン条件**（正規ソフトの自動起動との差分）を作成する
+- 可能ならMITRE ATT&CKへのマッピング（Persistence / Scheduled Task, Registry Run Keys, Startup Items）
