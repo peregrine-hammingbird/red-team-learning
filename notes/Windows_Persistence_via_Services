@@ -1,0 +1,110 @@
+# THM Notes — Windows Persistence via Services (Create / Modify)
+
+Date: 2026-02-01  
+Platform: TryHackMe  
+Focus: Windows Services as a persistence mechanism (defender-oriented notes)
+
+---
+
+## Summary (What I learned today)
+
+Today I studied how Windows **Services** can be abused for persistence in two broad ways:
+
+1) **Creating a new service** that points to an attacker-controlled executable  
+2) **Modifying an existing service** (especially one that is stopped) to repoint its executable path and adjust start/run context
+
+I focused on *what configuration elements matter*, *where evidence appears*, and *what to monitor in a SOC context*.  
+Source notes: Creating new services / Modifying existing services. 
+
+---
+
+## Services: the 3 configuration fields that matter most
+
+When a service is used for persistence, these attributes are the key pivots:
+
+- **BINARY_PATH_NAME (binPath)**  
+  Where the service points for the executable. If this changes unexpectedly, it’s a strong persistence signal.
+
+- **START_TYPE (start= auto / demand / disabled)**  
+  Persistence value increases when set to **automatic** (runs at boot without user interaction).
+
+- **SERVICE_START_NAME (obj= … / the service account)**  
+  The account under which the service runs. Higher privilege contexts (e.g., LocalSystem) increase impact and urgency.
+
+(These were explicitly called out in the lab notes, and they’re also a useful triage checklist.) :contentReference[oaicite:2]{index=2}
+
+---
+
+## Scenario A — Creating a new service (persistence-by-addition)
+
+### Defender takeaways
+- New service creation is often noisy enough to detect if logging/EDR telemetry is in place.
+- Key question: **Is this service expected in this environment?** (baseline gap)
+
+### What to record during triage
+- Service name / display name (is it masquerading as something legit?)
+- binPath target: location, signing status, parent process that created it
+- Start type and service account context
+
+Lab reference: service created and started via SCM tooling. :contentReference[oaicite:3]{index=3}
+
+---
+
+## Scenario B — Modifying an existing service (persistence-by-repurpose)
+
+### Defender takeaways
+- Attackers may prefer this because it can blend into “already existing” inventory.
+- Especially suspicious when:
+  - A previously **STOPPED** service is modified
+  - binPath is repointed to an unexpected location
+  - start type and service account are escalated
+
+### What to record during triage
+- Before/after diff: binPath, start type, service account
+- Whether the service is set to **AUTO_START**
+- Whether the run context is elevated compared to baseline
+
+Lab reference: querying service inventory, checking config, then reconfiguring service parameters. :contentReference[oaicite:4]{index=4}
+
+---
+
+## Evidence & telemetry to monitor (SOC view)
+
+### Windows logs / host telemetry (examples)
+- **Service installation/creation** events (common in System log, e.g., Service Control Manager)
+- Service configuration changes (EDR telemetry often captures these)
+- Process lineage: who changed the service (parent process, user, integrity level)
+- File events at the binPath location (create/modify/rename), plus code signing info
+
+### Registry locations (high-level)
+- Service definitions under:
+  - `HKLM\SYSTEM\CurrentControlSet\Services\`
+
+---
+
+## Detection ideas (practical heuristics)
+
+- Alert on **new services** outside approved software deployment windows
+- Alert on **binPath changes**, especially:
+  - pointing to user-writable directories
+  - pointing to recently created executables
+- Alert on changes that combine:
+  - `start= auto` AND
+  - service account moved to higher privilege AND
+  - binPath repointed
+
+---
+
+## Hardening ideas
+
+- Baseline the service inventory (name, binPath, start type, service account) and diff regularly
+- Restrict who can create/modify services (least privilege, admin workflow)
+- Use application control (allowlisting) so “unknown executables” can’t run even if referenced by a service
+
+---
+
+## Next steps
+
+- Map these behaviors to MITRE ATT&CK (Persistence → Services)
+- Build a small “service triage checklist” for incident response:
+  - Identify → Validate legitimacy → Diff config → Contain (stop/disable) → Collect artifacts → Remediate
