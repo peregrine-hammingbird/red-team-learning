@@ -1,0 +1,92 @@
+# THM Notes — Executable Files & File Association Hijacking (Windows)
+
+Date: 2026-02-02  
+Platform: TryHackMe  
+Scope: Windows persistence / execution flow abuse (defender-oriented)
+
+---
+
+## What I studied today
+
+Today I focused on two Windows execution-abuse patterns:
+
+1) **Executable file / shortcut (.LNK) manipulation**
+2) **Hijacking file associations (extension → ProgID → open command)**
+
+Goal of the notes: understand **how execution is redirected**, and document **where evidence lands** + **how to detect/mitigate**.
+
+Sources: Executable Files / Hijacking File Associations 
+
+---
+
+## 1) Shortcut (.LNK) manipulation (Executable Files)
+
+### Core idea
+Instead of modifying the original executable, an attacker may modify a **shortcut’s target** so that a different command/script runs first, and then the legitimate program is launched. This can preserve the user’s expected behavior while still executing unwanted code.
+
+### Why it works (execution flow)
+- Users often click shortcuts (desktop/taskbar/start menu) rather than running the EXE directly.
+- The shortcut’s **Target** field controls what is executed.
+- The **Icon** can be set independently, enabling visual masquerading (user sees the expected icon).
+
+### Forensic artifacts / where to look
+- `.lnk` file changes (create/modify timestamps, file hash)
+- Shortcut properties: **Target**, **Start in**, **Arguments**, **Icon location**
+- Process lineage at execution time (what actually launched the “expected” application)
+
+### Detection ideas
+- Monitor `.lnk` modifications in high-value locations (Admin/Desktop/Public Desktop/Start Menu)
+- Alert on shortcut targets that point to:
+  - user-writable directories
+  - scripting hosts (PowerShell, wscript/cscript, mshta, rundll32) or unusual argument patterns
+- Correlate “user click → unexpected parent process” in process trees
+
+### Hardening
+- File integrity monitoring (FIM) for shortcut directories
+- Application control (WDAC/AppLocker) to restrict script hosts / unsigned binaries
+- User education: “icon looks normal” is not sufficient; validate shortcut target when suspicious
+
+---
+
+## 2) Hijacking File Associations (Registry)
+
+### Core idea
+Windows stores default file associations in the registry. An attacker can alter:
+**extension (.txt, etc.) → ProgID → shell\\open\\command**
+so that opening a common file type executes an alternative command/script first.
+
+### Registry flow (high level)
+1. Extension key (e.g., `.txt`) maps to a **ProgID**
+2. ProgID defines the default open handler via:
+   `...\\shell\\open\\command`
+3. When the user opens a file, Windows runs the command and passes the filename as an argument.
+
+### Forensic artifacts / where to look
+- `HKLM\\Software\\Classes\\.<ext>` (extension → ProgID mapping)
+- `HKLM\\Software\\Classes\\<ProgID>\\shell\\open\\command` (default open command)
+- Pay attention to how the filename argument is forwarded (the opened file path must be passed through)
+
+### Detection ideas
+- Alert on changes to file association keys, especially for common extensions (txt, doc, pdf, js, vbs, etc.)
+- Diff-baseline: “known-good open commands” vs current state
+- Hunt for open commands pointing to user-writable paths, scripts, or unusual interpreters
+
+### Hardening
+- Least privilege: prevent unauthorized registry modification
+- Baseline and periodically audit file association mappings
+- Application control + ASR rules to limit script abuse paths
+
+---
+
+## Key takeaways
+- Persistence/Execution-abuse can be achieved without touching the original EXE by redirecting **how users initiate programs** (shortcuts) or **how Windows opens files** (associations).
+- Defender value comes from monitoring the **control points**:
+  - shortcut target + arguments + icon path
+  - extension/ProgID/open-command registry keys
+
+---
+
+## Next steps
+- Map these behaviors to MITRE ATT&CK (Persistence / Defense Evasion areas)
+- Build a compact “triage checklist”:
+  - identify change (lnk/registry) → validate legitimacy → capture before/after diffs → contain → remediate
