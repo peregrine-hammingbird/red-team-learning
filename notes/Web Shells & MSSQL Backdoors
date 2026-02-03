@@ -1,0 +1,109 @@
+# THM Notes — Web Shells & MSSQL Backdoors (Defender-Focused)
+
+Date: 2026-02-03  
+Platform: TryHackMe  
+Topic: Persistence / Backdoor patterns via Web Server and MSSQL (defense + detection notes)
+
+Sources:
+- Using Web Shells :contentReference[oaicite:1]{index=1}
+- Using MSSQL as a Backdoor :contentReference[oaicite:2]{index=2}
+
+---
+
+## What I studied today
+
+Today I reviewed two common “backdoor” patterns and documented them from a SOC/blue-team viewpoint:
+
+1) **Web shell persistence on a web server (IIS webroot)**
+2) **MSSQL-based backdoor via triggers and OS command execution**
+
+The main goal was to understand:
+- *What makes these techniques work*
+- *Where evidence lands (logs/files/DB artifacts)*
+- *How to detect and harden against them*
+
+---
+
+## 1) Web Shells on a Web Server (IIS webroot)
+
+### High-level concept
+A web shell is typically a server-side script placed under a web-accessible directory (e.g., IIS webroot). When accessed via HTTP, it can execute server-side actions under the web server’s runtime identity (often a low-privileged IIS account by default). :contentReference[oaicite:3]{index=3}
+
+### Why defenders care
+- It is a simple persistence method once file write access is obtained.
+- It can become a pivot point for privilege escalation or further actions.
+
+### Evidence / artifacts to look for
+- **New or modified files** inside web directories (webroot and app directories)
+- **Permission changes** on web content files (e.g., unusually permissive ACL changes)
+- **IIS access logs**: repeated requests to a single script endpoint, suspicious query patterns
+- **Process telemetry**: web worker process spawning unusual child processes
+
+### Detection ideas
+- File integrity monitoring (FIM) / hashing for webroot
+- Alert on:
+  - new `.aspx`/`.php`/`.jsp`-like server scripts in production web directories
+  - ACL changes that grant broad write/execute permissions on web content
+  - IIS worker process launching command interpreters or uncommon binaries
+
+### Hardening ideas
+- Strict ACLs on webroot (no write for service accounts that shouldn’t deploy)
+- Separate deployment identity from runtime identity
+- Application allowlisting / constrained language settings where applicable
+- Routine diff/baseline checks for web directories
+
+---
+
+## 2) MSSQL as a Backdoor (Triggers + OS Command Execution)
+
+### High-level concept
+Microsoft SQL Server supports **triggers** that execute when certain DB events happen (e.g., INSERT/UPDATE). If an attacker can create/alter triggers and enable dangerous features, they can chain DB events into OS-level actions. :contentReference[oaicite:4]{index=4}
+
+### Key enabling condition (risk factor)
+- Features that allow executing OS commands from SQL context (commonly disabled by default) significantly raise risk if enabled or abused. :contentReference[oaicite:5]{index=5}
+
+### Evidence / artifacts to look for
+- **SQL Server configuration drift**:
+  - changes to advanced options / dangerous features being enabled
+- **New/modified triggers** on business tables (especially ones that should be static)
+- **Audit trail**:
+  - who created/altered the trigger
+  - from where (client host/app) and when
+- **OS telemetry correlation**:
+  - SQL Server service account initiating suspicious processes/network activity
+- **App-layer symptoms**:
+  - “normal” app actions (e.g., inserting a record) causing unexpected host behavior
+
+### Detection ideas
+- Baseline and alert on:
+  - configuration changes that enable risky execution features
+  - creation/alteration of triggers in sensitive DBs
+  - unusual activity by the SQL Server service account (process + network)
+- Enable SQL auditing / extended events (where feasible) to capture DDL changes (CREATE/ALTER TRIGGER)
+
+### Hardening ideas
+- Keep dangerous execution features disabled unless explicitly needed
+- Limit who can perform DDL changes (CREATE/ALTER TRIGGER), enforce least privilege
+- Separate duties: application accounts should not have broad admin rights
+- Monitor “data change → OS activity” correlations (high-signal in many environments)
+
+---
+
+## Takeaways
+- Both patterns are “execution-by-indirection”:
+  - Web shells abuse the web server’s request-to-code execution path
+  - MSSQL trigger abuse binds DB events to privileged actions
+- The defender advantage is **baseline + drift detection**:
+  - Web directories should be stable; changes are meaningful
+  - DB config and triggers should be tightly controlled; drift is meaningful
+
+---
+
+## Next steps
+- Map both topics to MITRE ATT&CK techniques (Persistence / Execution)
+- Create a compact SOC checklist:
+  1) identify change (file/DB config/trigger)  
+  2) validate legitimacy vs baseline  
+  3) collect evidence (logs + before/after diff)  
+  4) contain (disable endpoint / revert config)  
+  5) eradicate + lessons learned  
