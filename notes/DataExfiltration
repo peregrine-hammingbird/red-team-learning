@@ -1,0 +1,93 @@
+# THM Notes — Network Infrastructure & Data Exfiltration (TCP Socket)
+
+Date: 2026-02-04  
+Platform: TryHackMe  
+Focus: Post-compromise data movement + defender-oriented detection ideas
+
+Sources:
+- Network Infrastructure :contentReference[oaicite:1]{index=1}
+- Exfiltration using TCP socket :contentReference[oaicite:2]{index=2}
+
+---
+
+## What I studied today
+
+I studied **data exfiltration** as a post-compromise activity and how it relates to attacker goals and network behavior. The module framed exfiltration as occurring in the late stage of an intrusion lifecycle (often aligned with "Actions on Objectives"). :contentReference[oaicite:3]{index=3}
+
+I also practiced a lab scenario where data is transmitted over a **raw TCP socket** between two hosts (victim → attacker) using a listener on a chosen port. :contentReference[oaicite:4]{index=4}
+
+---
+
+## Data Exfiltration — core definition & use cases
+
+**Data Exfiltration**: unauthorized copying and moving sensitive data from inside an organization to an external location after initial compromise. :contentReference[oaicite:5]{index=5}
+
+Primary use cases highlighted:
+1) Exfiltrate data (one-way transfer)
+2) Command & Control (two-way interaction)
+3) Tunneling (persistent bridge to internal network) :contentReference[oaicite:6]{index=6}
+
+### 1) Traditional Exfiltration (one-way)
+- The attacker moves data out and may not care about responses.
+- Network pattern: mostly **egress-only** traffic. :contentReference[oaicite:7]{index=7}
+
+### 2) C2 Communications (two-way)
+- Attacker sends commands; victim returns results.
+- Network pattern: **interactive**, request/response-like. :contentReference[oaicite:8]{index=8}
+
+### 3) Tunneling (continuous bridge)
+- A channel is established to access internal network resources through the victim.
+- Network pattern: **continuous bidirectional** traffic. :contentReference[oaicite:9]{index=9}
+
+---
+
+## Lab concept — Exfiltration over a TCP socket
+
+High-level model:
+- One host **listens** on a TCP port.
+- The other host **connects** and sends data through the socket.
+- Transfer is completed without requiring an application-layer protocol like HTTP. :contentReference[oaicite:10]{index=10}
+
+The lab also demonstrated that data may be encoded/packed prior to transfer, making payload inspection less human-readable while still being detectable via behavioral signals (port, flow, volume, timing). :contentReference[oaicite:11]{index=11}
+
+---
+
+## Defender view — what to look for
+
+### Network indicators (high-signal heuristics)
+- **Unusual outbound connections** to non-standard ports (especially from user workstations/servers that don’t normally initiate them)
+- New/rare destination IPs or destinations outside expected geographies/ASNs
+- **One-way bulk transfer** patterns (exfil) vs **steady interactive** patterns (C2) vs **continuous session** patterns (tunneling)
+- Long-lived sessions with periodic beacons, or abrupt spikes in egress bytes
+
+### Host indicators (context matters)
+- Process-to-network correlation: which process initiated the outbound TCP connection?
+- File access just before egress spike (staging behavior: archive/collect → send)
+- Command execution or scripting activity preceding transfer (depending on telemetry)
+
+---
+
+## Practical detection ideas
+- Baseline “normal” outbound ports per subnet/host role; alert on deviations
+- Alert on:
+  - rare destination + non-standard port
+  - egress bytes anomaly (per host/user)
+  - new services/listeners on endpoints where none should exist
+- Correlate network anomalies with endpoint telemetry (EDR): process lineage + recent file reads
+
+---
+
+## Key takeaway
+Even when data is encoded before exfiltration, defenders can still detect exfil by monitoring:
+- **flow behavior** (direction, volume, duration)
+- **port/destination anomalies**
+- **endpoint context** (process + file staging activity)
+
+---
+
+## Next steps
+- Build a SOC triage checklist for suspected exfil:
+  1) Identify host + destination
+  2) Classify flow type (exfil vs C2 vs tunneling)
+  3) Correlate with endpoint process + file staging
+  4) Contain (isolate host / block destination) and collect evidence
